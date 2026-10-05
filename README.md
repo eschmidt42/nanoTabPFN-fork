@@ -11,7 +11,7 @@ pip install numpy torch schedulefree h5py scikit-learn openml seaborn
 
 ### Our Code
 
-- `model.py` contains the implementation of the architecture and a sklearn-like interface in less than 200 lines of code. 
+- `model.py` contains the implementation of the architecture and a sklearn-like interface in less than 200 lines of code.
 - `train.py` implements a simple training loop and prior dump data loader in under 200 lines
 - `experiment.ipynb` will recreate the experiment from the [paper](https://arxiv.org/pdf/2511.03634) (requires `pip install tabpfn==2.2.1`)
 
@@ -41,11 +41,7 @@ from train import train, get_default_device
 Then we instantiate our model
 ```py
 model = NanoTabPFNModel(
-    embedding_size=96,
-    num_attention_heads=4,
-    mlp_hidden_size=192,
-    num_layers=3,
-    num_outputs=2
+    embedding_size=96, num_attention_heads=4, mlp_hidden_size=192, num_layers=3, num_outputs=2
 )
 ```
 and our dataloader
@@ -59,12 +55,7 @@ prior = PriorDumpDataLoader(
 Now we can train our model:
 ```py
 device = get_default_device()
-model, _ = train(
-    model,
-    prior,
-    lr = 4e-3,
-    device = device
-)
+model, _ = train(model, prior, lr=4e-3, device=device)
 ```
 and finally we can instantiate our classifier:
 ```py
@@ -82,8 +73,8 @@ X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.5)
 clf.fit(X_train, y_train)
 prob = clf.predict_proba(X_test)
 pred = clf.predict(X_test)
-print('ROC AUC', roc_auc_score(y_test, prob))
-print('Accuracy', accuracy_score(y_test, pred))
+print("ROC AUC", roc_auc_score(y_test, prob))
+print("Accuracy", accuracy_score(y_test, pred))
 ```
 
 ### TFM-Playground
