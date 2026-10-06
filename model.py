@@ -206,13 +206,13 @@ class NanoTabPFNClassifier:
         self.model = model.to(device)
         self.device = device
 
-    def fit(self, X_train: np.array, y_train: np.array):
+    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
         """stores X_train and y_train for later use, also computes the highest class number occuring in num_classes"""
         self.X_train = X_train
         self.y_train = y_train
         self.num_classes = max(set(y_train)) + 1
 
-    def predict_proba(self, X_test: np.array) -> np.array:
+    def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
         """
         creates (x,y), runs it through our PyTorch Model, cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities
@@ -233,6 +233,6 @@ class NanoTabPFNClassifier:
             probabilities = F.softmax(out, dim=1)
             return probabilities.to("cpu").numpy()
 
-    def predict(self, X_test: np.array) -> np.array:
+    def predict(self, X_test: np.ndarray) -> np.ndarray:
         predicted_probabilities = self.predict_proba(X_test)
         return predicted_probabilities.argmax(axis=1)
