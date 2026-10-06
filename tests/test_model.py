@@ -49,7 +49,7 @@ def test_target_encoder_pads_each_batch_with_its_training_target_mean():
 
 
 def test_transformer_encoder_layer_does_not_let_training_rows_attend_to_test_rows():
-    layer = TransformerEncoderLayer(embedding_size=4, nhead=2, mlp_hidden_size=8)
+    layer = TransformerEncoderLayer(embed_dim=4, n_head=2, mlp_hidden_size=8)
     layer.eval()
     inputs = torch.randn(2, 5, 3, 4)
     changed_test_inputs = inputs.clone()
