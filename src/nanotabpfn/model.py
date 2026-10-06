@@ -6,15 +6,7 @@ from numpy.typing import NDArray
 from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
-from nanotabpfn.utils import preprocess_numpy_array
-
-
-def optional_unsqueeze(x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-    """Labels should be like (batches, num_train_datapoints, 1), adding the last dimension if it is missing."""
-
-    if len(y.shape) < len(x.shape):
-        y = y.unsqueeze(-1)
-    return y
+from nanotabpfn.utils import optional_unsqueeze, preprocess_numpy_array
 
 
 class NanoTabPFNModel(nn.Module):
