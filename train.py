@@ -1,8 +1,6 @@
-import random
 import time
 
 import h5py
-import numpy as np
 import schedulefree
 import torch
 from sklearn.datasets import *
@@ -12,24 +10,9 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from model import NanoTabPFNClassifier, NanoTabPFNModel
-
-
-def set_randomness_seed(seed):
-    random.seed(seed)
-    np.random.seed(seed)
-    torch.manual_seed(seed)
-
+from nanotabpfn import get_default_device, set_randomness_seed
 
 set_randomness_seed(0)
-
-
-def get_default_device():
-    device = "cpu"
-    if torch.backends.mps.is_available():
-        device = "mps"
-    if torch.cuda.is_available():
-        device = "cuda"
-    return device
 
 
 datasets = []
