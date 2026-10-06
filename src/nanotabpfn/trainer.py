@@ -1,11 +1,12 @@
 import time
+from collections.abc import Callable
 
 import schedulefree
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
 
-from nanotabpfn.model import NanoTabPFNModel
+from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 from nanotabpfn.utils import get_default_device
 
 
@@ -15,6 +16,7 @@ def train(
     lr: float = 1e-4,
     device: torch.device | None = None,
     steps_per_eval: int = 10,
+    eval_func: Callable | None = None,
 ):
     """
     Trains our model on the given prior using the given criterion.
@@ -35,6 +37,7 @@ def train(
     """
     if not device:
         device = get_default_device()
+
     model.to(device)
     optimizer = schedulefree.AdamWScheduleFree(model.parameters(), lr=lr, weight_decay=0.0)
     criterion = nn.CrossEntropyLoss()
@@ -47,9 +50,9 @@ def train(
     try:
         for step, full_data in enumerate(prior):
             step_start_time = time.time()
+
             train_test_split_index = full_data["train_test_split_index"]
-            # if (torch.isnan(data[0]).any() or torch.isnan(data[1]).any()):
-            #    continue
+
             data = (
                 full_data["x"].to(device),
                 full_data["y"][:, :train_test_split_index].to(device),
@@ -67,13 +70,27 @@ def train(
             total_loss = loss.item()
 
             torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+
             optimizer.step()
             optimizer.zero_grad()
+
             step_train_duration = time.time() - step_start_time
             train_time += step_train_duration
 
             # evaluate
-            if step % steps_per_eval == steps_per_eval - 1:
+            if step % steps_per_eval == steps_per_eval - 1 and eval_func is not None:
+                model.eval()
+                optimizer.eval()
+
+                classifier = NanoTabPFNClassifier(model, device)
+                scores = eval_func(classifier)
+                eval_history.append((train_time, scores))
+                score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items()])
+                print(f"time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
+
+                model.train()
+                optimizer.train()
+            elif step % steps_per_eval == steps_per_eval - 1 and eval_func is None:
                 print(f"time {train_time:7.1f}s | loss {total_loss:7.4f}")
 
     except KeyboardInterrupt:
