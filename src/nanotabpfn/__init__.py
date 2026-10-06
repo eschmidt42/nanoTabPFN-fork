@@ -1,5 +1,6 @@
 from nanotabpfn.data import PriorDumpDataLoader
 from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn.trainer import train
 from nanotabpfn.utils import get_default_device, set_randomness_seed
 
 __all__ = [
@@ -8,4 +9,5 @@ __all__ = [
     "PriorDumpDataLoader",
     "get_default_device",
     "set_randomness_seed",
+    "train",
 ]
