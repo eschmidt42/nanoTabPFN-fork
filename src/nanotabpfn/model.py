@@ -1,8 +1,12 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from einops import rearrange
+from numpy.typing import NDArray
 from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
+
+from nanotabpfn.utils import optional_unsqueeze, preprocess_numpy_array
 
 
 class NanoTabPFNModel(nn.Module):
@@ -15,40 +19,40 @@ class NanoTabPFNModel(nn.Module):
         num_outputs: int,
     ):
         """Initializes the feature/target encoder, transformer stack and decoder"""
+
         super().__init__()
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
-        self.transformer_blocks = nn.ModuleList()
-        for _ in range(num_layers):
-            self.transformer_blocks.append(
+        self.transformer_blocks = nn.ModuleList(
+            [
                 TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size)
-            )
+                for _ in range(num_layers)
+            ]
+        )
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(
         self, features_and_targets: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int
     ) -> torch.Tensor:
-        x_src, y_src = features_and_targets
-        # we expect the labels to look like (batches, num_train_datapoints, 1),
-        # so we add the last dimension if it is missing
-        if len(y_src.shape) < len(x_src.shape):
-            y_src = y_src.unsqueeze(-1)
+        x, y = features_and_targets
+
+        y = optional_unsqueeze(x, y)
         # from here on B=Batches, R=Rows, C=Columns, E=embedding size
         # converts scalar values to embeddings, so (B,R,C-1) -> (B,R,C-1,E)
-        x_src = self.feature_encoder(x_src, train_test_split_index)
-        num_rows = x_src.shape[1]
+        x = self.feature_encoder(x, train_test_split_index)
+        num_rows = x.shape[1]
         # padds the y_train up to y by using the mean,
         # then converts scalar values to embeddings (B,R,1,E)
-        y_src = self.target_encoder(y_src, num_rows)
+        y = self.target_encoder(y, num_rows)
         # concatenates the feature embeddings with the target embeddings
         # to give us the full table of embeddings (B,R,C,E))
-        encoded_features_and_targets = torch.cat([x_src, y_src], 2)
+        encoded_features_and_targets = torch.cat([x, y], 2)
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
             encoded_features_and_targets = block(
                 encoded_features_and_targets, train_test_split_index=train_test_split_index
             )
-        # selects the target embeddings (B,num_targets,1,E)
+        # selects the target embeddings (B,num_targets,-1,E)
         output = encoded_features_and_targets[:, train_test_split_index:, -1, :]
         # runs the embeddings through the decoder to get
         # the logits of our predictions (B,num_targets,num_classes)
@@ -57,10 +61,11 @@ class NanoTabPFNModel(nn.Module):
 
 
 class FeatureEncoder(nn.Module):
-    def __init__(self, embedding_size: int):
+    def __init__(self, embedding_size: int, f: float = 1e-20):
         """Creates the linear layer that we will use to embed our features."""
         super().__init__()
         self.linear_layer = nn.Linear(1, embedding_size)
+        self.f = f
 
     def forward(self, x: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
         """
@@ -75,10 +80,14 @@ class FeatureEncoder(nn.Module):
                            the embeddings of the features
         """
         x = x.unsqueeze(-1)
+
         mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdim=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdim=True) + 1e-20
+        std = torch.std(x[:, :train_test_split_index], dim=1, keepdim=True) + self.f
+
         x = (x - mean) / std
+
         x = torch.clip(x, min=-100, max=100)
+
         return self.linear_layer(x)
 
 
@@ -99,11 +108,13 @@ class TargetEncoder(nn.Module):
             (torch.Tensor) a tensor of shape (batch_size, num_rows, 1, embedding_size), representing
                            the embeddings of the targets
         """
-        # nan padding & nan handler instead?
         mean = torch.mean(y_train, dim=1, keepdim=True)
         padding = mean.repeat(1, num_rows - y_train.shape[1], 1)
+
         y = torch.cat([y_train, padding], dim=1)
+
         y = y.unsqueeze(-1)
+
         return self.linear_layer(y)
 
 
@@ -114,28 +125,30 @@ class TransformerEncoderLayer(nn.Module):
 
     def __init__(
         self,
-        embedding_size: int,
-        nhead: int,
+        embed_dim: int,
+        n_head: int,
         mlp_hidden_size: int,
         layer_norm_eps: float = 1e-5,
         batch_first: bool = True,
-        device=None,
+        device: torch.device | None = None,
         dtype=None,
     ):
         super().__init__()
+
         self.self_attention_between_datapoints = MultiheadAttention(
-            embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype
+            embed_dim, n_head, batch_first=batch_first, device=device, dtype=dtype
         )
+
         self.self_attention_between_features = MultiheadAttention(
-            embedding_size, nhead, batch_first=batch_first, device=device, dtype=dtype
+            embed_dim, n_head, batch_first=batch_first, device=device, dtype=dtype
         )
 
-        self.linear1 = Linear(embedding_size, mlp_hidden_size, device=device, dtype=dtype)
-        self.linear2 = Linear(mlp_hidden_size, embedding_size, device=device, dtype=dtype)
+        self.linear1 = Linear(embed_dim, mlp_hidden_size, device=device, dtype=dtype)
+        self.linear2 = Linear(mlp_hidden_size, embed_dim, device=device, dtype=dtype)
 
-        self.norm1 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
-        self.norm2 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
-        self.norm3 = LayerNorm(embedding_size, eps=layer_norm_eps, device=device, dtype=dtype)
+        self.norm1 = LayerNorm(embed_dim, eps=layer_norm_eps, device=device, dtype=dtype)
+        self.norm2 = LayerNorm(embed_dim, eps=layer_norm_eps, device=device, dtype=dtype)
+        self.norm3 = LayerNorm(embed_dim, eps=layer_norm_eps, device=device, dtype=dtype)
 
     def forward(self, src: torch.Tensor, train_test_split_index: int) -> torch.Tensor:
         """
@@ -149,36 +162,45 @@ class TransformerEncoderLayer(nn.Module):
         Returns
             (torch.Tensor) a tensor of shape (batch_size, num_rows, num_features, embedding_size)
         """
-        batch_size, rows_size, col_size, embedding_size = src.shape
-        # attention between features
-        src = src.reshape(batch_size * rows_size, col_size, embedding_size)
-        src = self.self_attention_between_features(src, src, src, need_weights=False)[0] + src
-        src = src.reshape(batch_size, rows_size, col_size, embedding_size)
+        batch_size, _, _, _ = src.shape  # B, R, C, E
+
+        # attention between features - combining batch and row axes
+        src = rearrange(src, "b r c e -> (b r) c e")
+        feature_attention_output, _ = self.self_attention_between_features(
+            src, src, src, need_weights=False
+        )
+        src = feature_attention_output + src
+
+        src = rearrange(src, "(b r) c e -> b r c e", b=batch_size)
         src = self.norm1(src)
-        # attention between datapoints
-        src = src.transpose(1, 2)
-        src = src.reshape(batch_size * col_size, rows_size, embedding_size)
+
+        # attention between datapoints - combining batch and feature axes
+        src = rearrange(src, "b r c e -> (b c) r e")
+
         # training data attends to itself
-        src_left = self.self_attention_between_datapoints(
+        src_left, _ = self.self_attention_between_datapoints(
             src[:, :train_test_split_index],
             src[:, :train_test_split_index],
             src[:, :train_test_split_index],
             need_weights=False,
-        )[0]
+        )
+
         # test data attends to the training data
-        src_right = self.self_attention_between_datapoints(
+        src_right, _ = self.self_attention_between_datapoints(
             src[:, train_test_split_index:],
             src[:, :train_test_split_index],
             src[:, :train_test_split_index],
             need_weights=False,
-        )[0]
+        )
+
         src = torch.cat([src_left, src_right], dim=1) + src
-        src = src.reshape(batch_size, col_size, rows_size, embedding_size)
-        src = src.transpose(2, 1)
+        src = rearrange(src, "(b c) r e -> b r c e", b=batch_size)
         src = self.norm2(src)
+
         # MLP after attention
         src = self.linear2(F.gelu(self.linear1(src))) + src
         src = self.norm3(src)
+
         return src
 
 
@@ -208,33 +230,39 @@ class NanoTabPFNClassifier:
         self.model = model.to(device)
         self.device = device
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
+    def fit(self, X_train: NDArray, y_train: NDArray):
         """stores X_train and y_train for later use, also computes the highest class number occuring in num_classes"""
         self.X_train = X_train
         self.y_train = y_train
         self.num_classes = max(set(y_train)) + 1
 
-    def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X_test: NDArray) -> NDArray:
         """
         creates (x,y), runs it through our PyTorch Model, cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities
         """
+
         x = np.concatenate((self.X_train, X_test))
         y = self.y_train
+
         with torch.no_grad():
-            x = (
-                torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
-            )  # introduce batch size 1
-            y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model((x, y), train_test_split_index=len(self.X_train)).squeeze(
-                0
-            )  # remove batch size 1
+            x = preprocess_numpy_array(x, self.device)
+            y = preprocess_numpy_array(y, self.device)
+
+            out: torch.Tensor = self.model((x, y), train_test_split_index=len(self.X_train))
+
+            out = out.squeeze(0)  # remove batch size 1
+
             # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
             out = out[:, : self.num_classes]
-            # apply softmax to get a probability distribution
-            probabilities = F.softmax(out, dim=1)
-            return probabilities.to("cpu").numpy()
 
-    def predict(self, X_test: np.ndarray) -> np.ndarray:
-        predicted_probabilities = self.predict_proba(X_test)
-        return predicted_probabilities.argmax(axis=1)
+            probabilities = F.softmax(out, dim=1)
+
+        return probabilities.to("cpu").numpy()
+
+    def predict(self, X_test: NDArray) -> NDArray:
+
+        probabilities = self.predict_proba(X_test)
+        y_pred = probabilities.argmax(axis=1)
+
+        return y_pred

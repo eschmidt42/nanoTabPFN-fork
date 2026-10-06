@@ -4,13 +4,14 @@ import h5py
 import numpy as np
 import pytest
 import torch
+from numpy.typing import NDArray
 
 from nanotabpfn import data
 from nanotabpfn.data import PriorDumpDataLoader
 
 
 @pytest.fixture
-def prior_dump_file(tmp_path: Path) -> tuple[str, np.ndarray, np.ndarray]:
+def prior_dump_file(tmp_path: Path) -> tuple[str, NDArray, NDArray]:
     filename = tmp_path / "prior_dump.h5"
     features = np.arange(5 * 4 * 3, dtype=np.float32).reshape(5, 4, 3)
     targets = np.arange(5 * 4, dtype=np.int64).reshape(5, 4)
@@ -27,7 +28,7 @@ def prior_dump_file(tmp_path: Path) -> tuple[str, np.ndarray, np.ndarray]:
 
 
 def test_prior_dump_data_loader_initializes_from_dump_and_defaults_device(
-    prior_dump_file: tuple[str, np.ndarray, np.ndarray],
+    prior_dump_file: tuple[str, NDArray, NDArray],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     filename, _, _ = prior_dump_file
@@ -42,7 +43,7 @@ def test_prior_dump_data_loader_initializes_from_dump_and_defaults_device(
 
 
 def test_prior_dump_data_loader_batches_data_and_resets_pointer(
-    prior_dump_file: tuple[str, np.ndarray, np.ndarray],
+    prior_dump_file: tuple[str, NDArray, NDArray],
 ) -> None:
     filename, features, targets = prior_dump_file
     loader = PriorDumpDataLoader(filename, num_steps=4, batch_size=2, device="cpu")
@@ -50,7 +51,7 @@ def test_prior_dump_data_loader_batches_data_and_resets_pointer(
     batches = list(loader)
 
     assert len(batches) == 4
-    expected: list[tuple[np.ndarray, np.ndarray, int]] = [
+    expected: list[tuple[NDArray, NDArray, int]] = [
         (features[0:2, :3, :3], targets[0:2, :3], 1),
         (features[2:4, :4, :2], targets[2:4, :4], 2),
         (features[4:5, :2, :3], targets[4:5, :2], 1),

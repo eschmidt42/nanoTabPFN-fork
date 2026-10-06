@@ -1,10 +1,12 @@
 import random
+from math import prod
 
 import numpy as np
 import pytest
 import torch
 
 from nanotabpfn import get_default_device, set_randomness_seed
+from nanotabpfn.utils import optional_unsqueeze, preprocess_numpy_array
 
 
 def test_set_randomness_seed_repeats_python_numpy_and_torch():
@@ -38,3 +40,42 @@ def test_get_default_device(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: cuda_available)
 
     assert get_default_device() == expected
+
+
+def test_preprocess_numpy_array_adds_batch_dimension_and_converts_to_float():
+    array = np.array([[1, 2], [3, 4]], dtype=np.int64)
+    device = torch.device("cpu")
+
+    result = preprocess_numpy_array(array, device)
+
+    expected = torch.tensor(array, dtype=torch.float32).unsqueeze(0)
+    assert result.shape == (1, 2, 2)
+    assert result.dtype == torch.float32
+    assert result.device == device
+    torch.testing.assert_close(result, expected)
+
+
+@pytest.mark.parametrize("y_shape", [(2, 3), (3,)])
+def test_optional_unsqueeze_adds_one_trailing_dimension_when_y_has_lower_rank(
+    y_shape: tuple[int, ...],
+):
+    x = torch.empty((2, 3, 4))
+    y = torch.arange(prod(y_shape)).reshape(y_shape)
+
+    result = optional_unsqueeze(x, y)
+
+    assert result.shape == (*y_shape, 1)
+    torch.testing.assert_close(result, y.unsqueeze(-1))
+
+
+@pytest.mark.parametrize("y_shape", [(2, 3, 4), (2, 3, 4, 5)])
+def test_optional_unsqueeze_leaves_equal_or_higher_rank_y_unchanged(
+    y_shape: tuple[int, ...],
+):
+    x = torch.empty((2, 3, 4))
+    y = torch.arange(prod(y_shape)).reshape(y_shape)
+
+    result = optional_unsqueeze(x, y)
+
+    assert result.shape == y_shape
+    torch.testing.assert_close(result, y)
