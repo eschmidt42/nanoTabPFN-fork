@@ -13,7 +13,7 @@ from sklearn.preprocessing import FunctionTransformer, LabelEncoder, OrdinalEnco
 logger = logging.getLogger(__name__)
 
 
-def get_feature_preprocessor(X: NDArray | pd.DataFrame) -> ColumnTransformer:
+def _get_feature_preprocessor(X: NDArray | pd.DataFrame) -> ColumnTransformer:
     """
     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
     """
@@ -169,7 +169,7 @@ def get_openml_datasets(
         label_encoder = LabelEncoder()
         y = label_encoder.fit_transform(y)
 
-        preprocessor = get_feature_preprocessor(X)
+        preprocessor = _get_feature_preprocessor(X)
         X = preprocessor.fit_transform(X)
         datasets[dataset.name] = (X, y)
 
