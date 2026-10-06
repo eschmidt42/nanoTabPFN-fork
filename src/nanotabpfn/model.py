@@ -5,6 +5,8 @@ from numpy.typing import NDArray
 from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
+from nanotabpfn.utils import preprocess_numpy_array
+
 
 class NanoTabPFNModel(nn.Module):
     def __init__(
@@ -16,14 +18,17 @@ class NanoTabPFNModel(nn.Module):
         num_outputs: int,
     ):
         """Initializes the feature/target encoder, transformer stack and decoder"""
+
         super().__init__()
         self.feature_encoder = FeatureEncoder(embedding_size)
         self.target_encoder = TargetEncoder(embedding_size)
         self.transformer_blocks = nn.ModuleList()
+
         for _ in range(num_layers):
             self.transformer_blocks.append(
                 TransformerEncoderLayer(embedding_size, num_attention_heads, mlp_hidden_size)
             )
+
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(
@@ -220,22 +225,28 @@ class NanoTabPFNClassifier:
         creates (x,y), runs it through our PyTorch Model, cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities
         """
+
         x = np.concatenate((self.X_train, X_test))
         y = self.y_train
+
         with torch.no_grad():
-            x = (
-                torch.from_numpy(x).unsqueeze(0).to(torch.float).to(self.device)
-            )  # introduce batch size 1
-            y = torch.from_numpy(y).unsqueeze(0).to(torch.float).to(self.device)
-            out = self.model((x, y), train_test_split_index=len(self.X_train)).squeeze(
-                0
-            )  # remove batch size 1
+            x = preprocess_numpy_array(x, self.device)
+            y = preprocess_numpy_array(y, self.device)
+
+            out: torch.Tensor = self.model((x, y), train_test_split_index=len(self.X_train))
+
+            out = out.squeeze(0)  # remove batch size 1
+
             # our pretrained classifier supports up to num_outputs classes, if the dataset has less we cut off the rest
             out = out[:, : self.num_classes]
-            # apply softmax to get a probability distribution
+
             probabilities = F.softmax(out, dim=1)
-            return probabilities.to("cpu").numpy()
+
+        return probabilities.to("cpu").numpy()
 
     def predict(self, X_test: NDArray) -> NDArray:
-        predicted_probabilities = self.predict_proba(X_test)
-        return predicted_probabilities.argmax(axis=1)
+
+        probabilities = self.predict_proba(X_test)
+        y_pred = probabilities.argmax(axis=1)
+
+        return y_pred
