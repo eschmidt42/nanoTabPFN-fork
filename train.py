@@ -9,8 +9,12 @@ from sklearn.model_selection import train_test_split
 from torch import nn
 from torch.utils.data import DataLoader
 
-from nanotabpfn import get_default_device, set_randomness_seed
-from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
+from nanotabpfn import (
+    NanoTabPFNClassifier,
+    NanoTabPFNModel,
+    get_default_device,
+    set_randomness_seed,
+)
 
 set_randomness_seed(0)
 
