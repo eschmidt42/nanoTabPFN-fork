@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import torch
 
-from nanotabpfn.utils import get_default_device, set_randomness_seed
+from nanotabpfn import get_default_device, set_randomness_seed
 
 
 def test_set_randomness_seed_repeats_python_numpy_and_torch():
