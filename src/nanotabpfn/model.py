@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import torch.nn.functional as F
+from numpy.typing import NDArray
 from torch import nn
 from torch.nn.modules.transformer import LayerNorm, Linear, MultiheadAttention
 
@@ -208,13 +209,13 @@ class NanoTabPFNClassifier:
         self.model = model.to(device)
         self.device = device
 
-    def fit(self, X_train: np.ndarray, y_train: np.ndarray):
+    def fit(self, X_train: NDArray, y_train: NDArray):
         """stores X_train and y_train for later use, also computes the highest class number occuring in num_classes"""
         self.X_train = X_train
         self.y_train = y_train
         self.num_classes = max(set(y_train)) + 1
 
-    def predict_proba(self, X_test: np.ndarray) -> np.ndarray:
+    def predict_proba(self, X_test: NDArray) -> NDArray:
         """
         creates (x,y), runs it through our PyTorch Model, cuts off the classes that didn't appear in the training data
         and applies softmax to get the probabilities
@@ -235,6 +236,6 @@ class NanoTabPFNClassifier:
             probabilities = F.softmax(out, dim=1)
             return probabilities.to("cpu").numpy()
 
-    def predict(self, X_test: np.ndarray) -> np.ndarray:
+    def predict(self, X_test: NDArray) -> NDArray:
         predicted_probabilities = self.predict_proba(X_test)
         return predicted_probabilities.argmax(axis=1)
