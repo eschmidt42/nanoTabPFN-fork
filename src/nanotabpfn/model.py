@@ -26,9 +26,9 @@ class NanoTabPFNModel(nn.Module):
         self.decoder = Decoder(embedding_size, mlp_hidden_size, num_outputs)
 
     def forward(
-        self, src: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int
+        self, features_and_targets: tuple[torch.Tensor, torch.Tensor], train_test_split_index: int
     ) -> torch.Tensor:
-        x_src, y_src = src
+        x_src, y_src = features_and_targets
         # we expect the labels to look like (batches, num_train_datapoints, 1),
         # so we add the last dimension if it is missing
         if len(y_src.shape) < len(x_src.shape):
@@ -42,12 +42,14 @@ class NanoTabPFNModel(nn.Module):
         y_src = self.target_encoder(y_src, num_rows)
         # concatenates the feature embeddings with the target embeddings
         # to give us the full table of embeddings (B,R,C,E))
-        src = torch.cat([x_src, y_src], 2)
+        encoded_features_and_targets = torch.cat([x_src, y_src], 2)
         # repeatedly applies the transformer block on (B,R,C,E)
         for block in self.transformer_blocks:
-            src = block(src, train_test_split_index=train_test_split_index)
+            encoded_features_and_targets = block(
+                encoded_features_and_targets, train_test_split_index=train_test_split_index
+            )
         # selects the target embeddings (B,num_targets,1,E)
-        output = src[:, train_test_split_index:, -1, :]
+        output = encoded_features_and_targets[:, train_test_split_index:, -1, :]
         # runs the embeddings through the decoder to get
         # the logits of our predictions (B,num_targets,num_classes)
         output = self.decoder(output)
@@ -73,8 +75,8 @@ class FeatureEncoder(nn.Module):
                            the embeddings of the features
         """
         x = x.unsqueeze(-1)
-        mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdims=True)
-        std = torch.std(x[:, :train_test_split_index], dim=1, keepdims=True) + 1e-20
+        mean = torch.mean(x[:, :train_test_split_index], dim=1, keepdim=True)
+        std = torch.std(x[:, :train_test_split_index], dim=1, keepdim=True) + 1e-20
         x = (x - mean) / std
         x = torch.clip(x, min=-100, max=100)
         return self.linear_layer(x)
