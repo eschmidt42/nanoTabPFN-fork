@@ -24,8 +24,11 @@ def evaluate_model(
     datasets: Mapping[str, tuple[NDArray, NDArray]],
     cv: BaseCrossValidator = SKF,
 ) -> EvalResults:
-    """Evaluates a model on multiple datasets and returns metrics"""
+    """Evaluates a model on multiple datasets and returns ROC AUC scores."""
+
     metrics = {}
+    metric_name = "ROC AUC"
+
     for dataset_name, (X, y) in datasets.items():
         targets = []
         probabilities = []
@@ -33,23 +36,24 @@ def evaluate_model(
         for train_idx, test_idx in cv.split(X, y):
             X_train, X_test = X[train_idx], X[test_idx]
             y_train, y_test = y[train_idx], y[test_idx]
-            targets.append(y_test)
+
             model.fit(X_train, y_train)
+
             y_proba = model.predict_proba(X_test)
+
             if y_proba.shape[1] == 2:  # binary classification with neural network
                 y_proba = y_proba[:, 1]
+
+            targets.append(y_test)
             probabilities.append(y_proba)
 
         targets = np.concatenate(targets, axis=0)
         probabilities = np.concatenate(probabilities, axis=0)
 
-        metrics[f"{dataset_name}/ROC AUC"] = roc_auc_score(
+        metrics[f"{dataset_name}/{metric_name}"] = roc_auc_score(
             targets, probabilities, multi_class="ovr"
         )
 
-    metric_names = list({key.split("/")[-1] for key in metrics})
-    for metric_name in metric_names:
-        avg_metric = np.mean([metrics[key] for key in metrics if key.endswith(metric_name)])
-        metrics[f"{metric_name}"] = float(avg_metric)
+    metrics[metric_name] = float(np.mean([metrics[key] for key in metrics]))
 
     return metrics
