@@ -13,23 +13,27 @@ from sklearn.preprocessing import FunctionTransformer, LabelEncoder, OrdinalEnco
 logger = logging.getLogger(__name__)
 
 
-def _get_feature_preprocessor(X: NDArray | pd.DataFrame) -> ColumnTransformer:
+def _get_feature_preprocessor(X: NDArray) -> ColumnTransformer:
     """
     fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
     """
-    X = pd.DataFrame(X)
+    X_df = pd.DataFrame(X)
     num_mask = []
     cat_mask = []
-    for col in X:
-        unique_non_nan_entries = X[col].dropna().unique()
+
+    for col in X_df:
+        unique_non_nan_entries = X_df[col].dropna().unique()
+
         if len(unique_non_nan_entries) <= 1:
             num_mask.append(False)
             cat_mask.append(False)
             continue
-        non_nan_entries = X[col].notna().sum()
+
+        non_nan_entries = X_df[col].notna().sum()
         numeric_entries = (
-            pd.to_numeric(X[col], errors="coerce").notna().sum()
+            pd.to_numeric(X_df[col], errors="coerce").notna().sum()
         )  # in case numeric columns are stored as strings
+
         num_mask.append(non_nan_entries == numeric_entries)
         cat_mask.append(non_nan_entries != numeric_entries)
         # num_mask.append(is_numeric_dtype(X[col]))  # Assumes pandas dtype is correct
@@ -125,11 +129,14 @@ def get_openml_datasets(
         363711,
         363712,
     ]  # TabArena v0.1
+
     datasets = {}
+
     for task_id in task_ids:
         task = openml.tasks.get_task(task_id, download_splits=False)
         if task.task_type_id != TaskType.SUPERVISED_CLASSIFICATION:
             continue  # skip task, only classification
+
         dataset = task.get_dataset(download_data=False)
 
         qualities = dataset.qualities
@@ -145,6 +152,7 @@ def get_openml_datasets(
             or qualities["MinorityClassPercentage"] < 2.5
         ):
             continue
+
         X, y, _, _ = dataset.get_data(target=task.target_name, dataset_format="dataframe")  # ty: ignore[unresolved-attribute]
 
         if y is None:
