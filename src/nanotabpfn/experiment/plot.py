@@ -193,7 +193,7 @@ def _plot_nano_runs(
 
 def plot_nano_runs(
     nano_runs: list[pl.DataFrame],
-    metric: str,
+    metric: str = "ROC AUC",
     baselines: pl.DataFrame | None = None,
     baselines_std: pl.DataFrame | None = None,
     show_legend: bool = True,
