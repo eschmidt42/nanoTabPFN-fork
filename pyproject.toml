@@ -19,6 +19,7 @@ dependencies = [
     "einops>=0.8.2",
     "tabpfn>=9.1.0",
     "polars>=2.0.0",
+    "pydantic>=2.13.5",
 ]
 
 [project.scripts]
