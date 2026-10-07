@@ -191,15 +191,21 @@ def plot_run_grid(
 ):
     """Plot Polars runs in a grid of metrics x datasets."""
     datasets = list(dict.fromkeys(col.split("/")[0] for col in nano_runs[0].columns if "/" in col))
+
     metric = "ROC AUC"
+
     figsize = (len(datasets) * 4, 4.6)
+
     fig, axs = plt.subplots(
         1, len(datasets), figsize=figsize, sharex=True, sharey=True, layout="constrained"
     )
     axs = np.atleast_1d(axs)
+
     fig.set_layout_engine("constrained", w_pad=0.0, h_pad=0.1)
+
     for j, dataset in enumerate(datasets):
         ax = axs[j]
+
         plot_nano_runs(
             ax,
             nano_runs,
@@ -211,6 +217,7 @@ def plot_run_grid(
             show_ylabel=(j == 0),
         )
         ax.set_title(dataset)
+
     fig.supxlabel("Training Time (seconds)")
 
     for ax in axs.flatten():
@@ -222,4 +229,5 @@ def plot_run_grid(
     legend_handles_labels = functools.reduce(lambda a, b: a + b, legend_handles_labels)
     unique = {label: handle for (handle, label) in legend_handles_labels}
     fig.legend(unique.values(), unique.keys(), loc="outside upper center", ncol=3)
+
     return fig, axs
