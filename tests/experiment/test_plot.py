@@ -3,12 +3,12 @@ import numpy as np
 import polars as pl
 from plotnine import ggplot
 
-from nanotabpfn.experiment import plot_nano_runs_v2 as exported_plot_nano_runs_v2
-from nanotabpfn.experiment import plot_run_grid_v2 as exported_plot_run_grid_v2
+from nanotabpfn.experiment import plot_nano_runs as exported_plot_nano_runs
+from nanotabpfn.experiment import plot_run_grid as exported_plot_run_grid
 from nanotabpfn.experiment.plot import (
-    _plot_nano_runs_v2_data,
-    plot_nano_runs_v2,
-    plot_run_grid_v2,
+    _plot_nano_runs_data,
+    plot_nano_runs,
+    plot_run_grid,
 )
 
 
@@ -41,14 +41,14 @@ def _make_polars_baselines() -> pl.DataFrame:
     )
 
 
-def test_plot_nano_runs_v2_returns_plotnine_plot_with_summary_and_baselines() -> None:
-    line_data, ribbon_data = _plot_nano_runs_v2_data(
+def test_plot_nano_runs_returns_plotnine_plot_with_summary_and_baselines() -> None:
+    line_data, ribbon_data = _plot_nano_runs_data(
         _make_polars_runs(),
         "iris/ROC AUC",
         _make_polars_baselines(),
         pl.DataFrame({"baseline": ["Baseline"], "iris/ROC AUC": [0.05]}),
     )
-    plot = plot_nano_runs_v2(
+    plot = plot_nano_runs(
         _make_polars_runs(),
         "iris/ROC AUC",
         baselines=_make_polars_baselines(),
@@ -82,8 +82,8 @@ def test_plot_nano_runs_v2_returns_plotnine_plot_with_summary_and_baselines() ->
     plt.close(plot.draw())
 
 
-def test_plot_nano_runs_v2_honors_label_and_tick_options() -> None:
-    plot = plot_nano_runs_v2(
+def test_plot_nano_runs_honors_label_and_tick_options() -> None:
+    plot = plot_nano_runs(
         _make_polars_runs(),
         "iris/ROC AUC",
         show_legend=False,
@@ -102,12 +102,12 @@ def test_plot_nano_runs_v2_honors_label_and_tick_options() -> None:
     plt.close(fig)
 
 
-def test_plot_run_grid_v2_facets_datasets_and_is_exported() -> None:
-    plot = plot_run_grid_v2(_make_polars_runs(), _make_polars_baselines())
+def test_plot_run_grid_facets_datasets_and_is_exported() -> None:
+    plot = plot_run_grid(_make_polars_runs(), _make_polars_baselines())
 
     assert isinstance(plot, ggplot)
-    assert isinstance(exported_plot_nano_runs_v2(_make_polars_runs(), "iris/ROC AUC"), ggplot)
-    assert isinstance(exported_plot_run_grid_v2(_make_polars_runs()), ggplot)
+    assert isinstance(exported_plot_nano_runs(_make_polars_runs(), "iris/ROC AUC"), ggplot)
+    assert isinstance(exported_plot_run_grid(_make_polars_runs()), ggplot)
     fig = plot.draw()
     assert len(fig.axes) == 2
     plt.close(fig)

@@ -76,7 +76,7 @@ _PLOTNINE_LINETYPES = [
 ]
 
 
-def _plot_nano_runs_v2_data(
+def _plot_nano_runs_data(
     nano_runs: list[pl.DataFrame],
     metric: str,
     baselines: pl.DataFrame | None,
@@ -130,7 +130,7 @@ def _plot_nano_runs_v2_data(
     return line_data, pd.DataFrame(ribbon_rows)
 
 
-def _plot_nano_runs_v2(
+def _plot_nano_runs(
     line_data: pd.DataFrame,
     ribbon_data: pd.DataFrame,
     metric_label: str,
@@ -191,7 +191,7 @@ def _plot_nano_runs_v2(
     return plot
 
 
-def plot_nano_runs_v2(
+def plot_nano_runs(
     nano_runs: list[pl.DataFrame],
     metric: str,
     baselines: pl.DataFrame | None = None,
@@ -202,13 +202,13 @@ def plot_nano_runs_v2(
     show_xtics: bool = True,
 ) -> ggplot:
     """Build a plotnine plot of runs and optional baselines from Polars DataFrames."""
-    line_data, ribbon_data = _plot_nano_runs_v2_data(
+    line_data, ribbon_data = _plot_nano_runs_data(
         nano_runs,
         metric,
         baselines,
         baselines_std,
     )
-    return _plot_nano_runs_v2(
+    return _plot_nano_runs(
         line_data,
         ribbon_data,
         metric.split("/")[-1],
@@ -220,7 +220,7 @@ def plot_nano_runs_v2(
     )
 
 
-def plot_run_grid_v2(
+def plot_run_grid(
     nano_runs: list[pl.DataFrame],
     baselines: pl.DataFrame | None = None,
     baselines_std: pl.DataFrame | None = None,
@@ -232,7 +232,7 @@ def plot_run_grid_v2(
     line_frames = []
     ribbon_frames = []
     for dataset in datasets:
-        line_data, ribbon_data = _plot_nano_runs_v2_data(
+        line_data, ribbon_data = _plot_nano_runs_data(
             nano_runs,
             f"{dataset}/{metric}",
             baselines,
@@ -245,7 +245,7 @@ def plot_run_grid_v2(
 
     line_data = pd.concat(line_frames, ignore_index=True)
     ribbon_data = pd.concat(ribbon_frames, ignore_index=True)
-    plot = _plot_nano_runs_v2(
+    plot = _plot_nano_runs(
         line_data,
         ribbon_data,
         metric,
