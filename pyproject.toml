@@ -18,6 +18,7 @@ dependencies = [
     "plotnine>=0.15.7",
     "einops>=0.8.2",
     "tabpfn>=9.1.0",
+    "polars>=2.0.0",
 ]
 
 [project.scripts]
