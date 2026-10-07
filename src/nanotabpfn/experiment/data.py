@@ -2,7 +2,7 @@ import logging
 
 import numpy as np
 import openml
-import pandas as pd
+import polars as pl
 from numpy.typing import NDArray
 from openml.tasks import TaskType
 from sklearn.compose import ColumnTransformer
@@ -13,46 +13,73 @@ from sklearn.preprocessing import FunctionTransformer, LabelEncoder, OrdinalEnco
 logger = logging.getLogger(__name__)
 
 
-def _get_feature_preprocessor(X: NDArray) -> ColumnTransformer:
+def _to_polars_frame(values: NDArray) -> pl.DataFrame:
+    columns = {
+        str(i): [
+            None
+            if value is None or (isinstance(value, (float, np.floating)) and np.isnan(value))
+            else value
+            for value in values[:, i]
+        ]
+        for i in range(values.shape[1])
+    }
+    return pl.DataFrame(columns, strict=False)
+
+
+def _get_column_masks(X_df: pl.DataFrame) -> tuple[NDArray, NDArray]:
     """
-    fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
+    If a column has zero or one distinct non-null value, both masks are `False`.
+    That marks all-null and constant columns to be excluded by the `ColumnTransformer`.
+
+    Otherwise, it attempts to cast the column to `Float64` with `strict=False`.
+    If every non-null value converts successfully, the numeric mask is `True`;
+    if not, the categorical mask is `True`.
+    Numeric strings therefore count as numeric, while columns mixing numeric and nonnumeric values count as categorical.
     """
-    X_df = pd.DataFrame(X)
     num_mask = []
     cat_mask = []
 
-    for col in X_df:
-        unique_non_nan_entries = X_df[col].dropna().unique()
+    for col in X_df.columns:
+        series = X_df[col]
+        unique_non_nan_entries = series.drop_nulls().n_unique()
 
-        if len(unique_non_nan_entries) <= 1:
+        if unique_non_nan_entries <= 1:
             num_mask.append(False)
             cat_mask.append(False)
             continue
 
-        non_nan_entries = X_df[col].notna().sum()
-        numeric_entries = (
-            pd.to_numeric(X_df[col], errors="coerce").notna().sum()
-        )  # in case numeric columns are stored as strings
+        non_nan_entries = len(series) - series.null_count()
+        numeric_series = series.cast(pl.Float64, strict=False)
+        numeric_entries = (numeric_series.is_not_null() & ~numeric_series.is_nan()).sum()
 
         num_mask.append(non_nan_entries == numeric_entries)
         cat_mask.append(non_nan_entries != numeric_entries)
-        # num_mask.append(is_numeric_dtype(X[col]))  # Assumes pandas dtype is correct
 
     num_mask = np.array(num_mask)
     cat_mask = np.array(cat_mask)
+    return num_mask, cat_mask
+
+
+def _get_feature_preprocessor(X: NDArray) -> ColumnTransformer:
+    """
+    fits a preprocessor that imputes NaNs, encodes categorical features and removes constant features
+    """
+
+    X_df = _to_polars_frame(X)
+    num_mask, cat_mask = _get_column_masks(X_df)
 
     num_transformer = Pipeline(
         [
             (
-                "to_pandas",
+                "to_polars",
                 FunctionTransformer(
-                    lambda x: pd.DataFrame(x) if not isinstance(x, pd.DataFrame) else x
+                    lambda x: (
+                        _to_polars_frame(x)
+                        .select(pl.all().cast(pl.Float64, strict=False))
+                        .to_numpy()
+                    )
                 ),
-            ),  # to apply pd.to_numeric of pandas
-            (
-                "to_numeric",
-                FunctionTransformer(lambda x: x.apply(pd.to_numeric, errors="coerce").to_numpy()),
-            ),  # in case numeric columns are stored as strings
+            ),
         ]
     )
     cat_transformer = Pipeline(
@@ -174,11 +201,13 @@ def get_openml_datasets(
 
         X = X_sub.to_numpy(copy=True)  # ty: ignore[unresolved-attribute]
         y = y_sub.to_numpy(copy=True)  # ty: ignore[unresolved-attribute]
-        label_encoder = LabelEncoder()
-        y = label_encoder.fit_transform(y)
 
-        preprocessor = _get_feature_preprocessor(X)
-        X = preprocessor.fit_transform(X)
-        datasets[dataset.name] = (X, y)
+        label_encoder = LabelEncoder()
+        input_encoder = _get_feature_preprocessor(X)
+
+        y_enc = label_encoder.fit_transform(y)
+        X_enc = input_encoder.fit_transform(X)
+
+        datasets[dataset.name] = (X_enc, y_enc)
 
     return datasets
