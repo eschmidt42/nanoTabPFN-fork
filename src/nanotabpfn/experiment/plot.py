@@ -4,6 +4,148 @@ import matplotlib.pyplot as plt
 import numpy as np
 import polars as pl
 import seaborn as sns
+from numpy.typing import NDArray
+
+
+def _summarize_nano_runs(
+    nano_runs: list[pl.DataFrame], metric: str
+) -> tuple[NDArray, NDArray, NDArray | None]:
+
+    shared_times = (
+        pl.concat([run.select("training_time") for run in nano_runs]).unique().sort("training_time")
+    )
+
+    aligned_runs = []
+
+    for i, run in enumerate(nano_runs):
+        aligned = (
+            shared_times.join(
+                run.select("training_time", metric).with_columns(pl.col(metric).fill_nan(None)),
+                on="training_time",
+                how="left",
+            )
+            .sort("training_time")
+            .with_columns(pl.col(metric).interpolate())
+            .rename({metric: f"run_{i}"})
+        )
+        aligned_runs.append(aligned)
+
+    all_runs = aligned_runs[0]
+    for run in aligned_runs[1:]:
+        all_runs = all_runs.join(run, on="training_time", how="inner")
+
+    all_runs = all_runs.drop_nulls().sort("training_time")
+
+    run_columns = [f"run_{i}" for i in range(len(aligned_runs))]
+    values = all_runs.select(run_columns).to_numpy()
+
+    mean = values.mean(axis=1)
+    training_times = all_runs["training_time"].to_numpy()
+    std = values.std(axis=1, ddof=1) if len(run_columns) > 1 else None
+
+    return training_times, mean, std
+
+
+def _plot_baselines(
+    ax: plt.Axes,
+    training_times: NDArray,
+    baselines: pl.DataFrame,
+    baselines_std: pl.DataFrame | None,
+    metric: str,
+) -> None:
+
+    colors = sns.color_palette("tab10")[1:]
+
+    linestyles = [
+        "--",
+        "-.",
+        ":",
+        (0, (3, 1, 1, 1)),
+        (0, (5, 5)),
+    ]
+
+    baseline_std_values = {}
+
+    if baselines_std is not None:
+        baseline_std_values = dict(baselines_std.select("baseline", metric).iter_rows())
+
+    for i, (baseline_name, baseline_value) in enumerate(
+        baselines.select("baseline", metric).iter_rows()
+    ):
+        color = colors[i % len(colors)]
+        ax.plot(
+            [0, max(training_times)],
+            [baseline_value, baseline_value],
+            label=baseline_name,
+            alpha=0.7,
+            linestyle=linestyles[i],
+            color=color,
+            zorder=1,
+        )
+        if baseline_name in baseline_std_values:
+            std = baseline_std_values[baseline_name]
+
+            x = [0, max(training_times)]
+            y_lb = [baseline_value - std, baseline_value - std]
+            y_ub = [baseline_value + std, baseline_value + std]
+
+            ax.fill_between(
+                x,
+                y_lb,
+                y_ub,
+                alpha=0.2,
+                zorder=1,
+            )
+
+
+def _add_sorted_legend(ax: plt.Axes) -> None:
+    handles, labels = ax.get_legend_handles_labels()
+    label_y_values = {}
+    for handle, label in zip(handles, labels):
+        if isinstance(handle, plt.Line2D):
+            y_data = np.asarray(handle.get_ydata())
+            label_y_values[label] = y_data[-1]
+    sorted_labels = sorted(label_y_values.items(), key=lambda x: x[1], reverse=True)
+    sorted_handles = [
+        handle for label, _ in sorted_labels for handle, lbl in zip(handles, labels) if lbl == label
+    ]
+    sorted_labels = [label for label, _ in sorted_labels]
+    ax.legend(sorted_handles, sorted_labels)
+
+
+def _style_axes(
+    ax: plt.Axes,
+    metric: str,
+    training_times: NDArray,
+    show_legend: bool,
+    show_xlabel: bool,
+    show_ylabel: bool,
+    show_xtics: bool,
+) -> None:
+
+    ax.grid(True, axis="y")
+    ax.grid(False, axis="x")
+    ax.tick_params(axis="y", length=0)
+
+    if not show_xtics:
+        ax.tick_params(axis="x", length=0)
+
+    if show_xlabel:
+        ax.set_xlabel("Training time (seconds)")
+
+    if show_ylabel:
+        ax.set_ylabel(metric.split("/")[-1])
+
+    max_time = max(training_times)
+    ax.set_xlim(0, max_time)
+    ylim = ax.get_ylim()
+    ax.set_ylim(ylim[0], 1)
+
+    if show_legend:
+        _add_sorted_legend(ax)
+
+    for spine in ax.spines.values():
+        spine.set_visible(False)
 
 
 def plot_nano_runs(
@@ -23,108 +165,23 @@ def plot_nano_runs(
     Each run needs `"training_time"` and `metric` columns. Baseline frames need
     a `"baseline"` column containing the label for each row and a `metric` column.
     """
-    colors = sns.color_palette("tab10")[1:]
-    linestyles = [
-        "--",
-        "-.",
-        ":",
-        (0, (3, 1, 1, 1)),
-        (0, (5, 5)),
-    ]
+    training_times, mean, std = _summarize_nano_runs(nano_runs, metric)
 
-    shared_times = (
-        pl.concat([run.select("training_time") for run in nano_runs]).unique().sort("training_time")
-    )
-    aligned_runs = []
-    for i, run in enumerate(nano_runs):
-        aligned = (
-            shared_times.join(
-                run.select("training_time", metric).with_columns(pl.col(metric).fill_nan(None)),
-                on="training_time",
-                how="left",
-            )
-            .sort("training_time")
-            .with_columns(pl.col(metric).interpolate())
-            .rename({metric: f"run_{i}"})
-        )
-        aligned_runs.append(aligned)
-
-    all_runs = aligned_runs[0]
-    for run in aligned_runs[1:]:
-        all_runs = all_runs.join(run, on="training_time", how="inner")
-    all_runs = all_runs.drop_nulls().sort("training_time")
-
-    run_columns = [f"run_{i}" for i in range(len(aligned_runs))]
-    values = all_runs.select(run_columns).to_numpy()
-    mean = values.mean(axis=1)
-    training_times = all_runs["training_time"].to_numpy()
     ax.plot(training_times, mean, label="nanoTabPFN", zorder=2, color="blue")
-    if len(run_columns) > 1:
-        std = values.std(axis=1, ddof=1)
+
+    if std is not None:
         ax.fill_between(training_times, mean - std, mean + std, alpha=0.2, zorder=2)
 
     if baselines is not None:
-        baseline_std_values = (
-            dict(baselines_std.select("baseline", metric).iter_rows())
-            if baselines_std is not None
-            else {}
+        _plot_baselines(
+            ax,
+            training_times,
+            baselines,
+            baselines_std,
+            metric,
         )
-        for i, (baseline_name, baseline_value) in enumerate(
-            baselines.select("baseline", metric).iter_rows()
-        ):
-            color = colors[i % len(colors)]
-            ax.plot(
-                [0, max(training_times)],
-                [baseline_value, baseline_value],
-                label=baseline_name,
-                alpha=0.7,
-                linestyle=linestyles[i],
-                color=color,
-                zorder=1,
-            )
-            if baseline_name in baseline_std_values:
-                std = baseline_std_values[baseline_name]
-                ax.fill_between(
-                    [0, max(training_times)],
-                    [baseline_value - std, baseline_value - std],
-                    [baseline_value + std, baseline_value + std],
-                    alpha=0.2,
-                    zorder=1,
-                )
 
-    ax.grid(True, axis="y")
-    ax.grid(False, axis="x")
-    ax.tick_params(axis="y", length=0)
-    if not show_xtics:
-        ax.tick_params(axis="x", length=0)
-    if show_xlabel:
-        ax.set_xlabel("Training time (seconds)")
-    if show_ylabel:
-        ax.set_ylabel(metric.split("/")[-1])
-    max_time = max(training_times)
-    ax.set_xlim(0, max_time)
-    ylim = ax.get_ylim()
-    ax.set_ylim(ylim[0], 1)
-
-    if show_legend:
-        handles, labels = ax.get_legend_handles_labels()
-        label_y_values = {}
-        for handle, label in zip(handles, labels):
-            if isinstance(handle, plt.Line2D):
-                y_data = np.asarray(handle.get_ydata())
-                label_y_values[label] = y_data[-1]
-        sorted_labels = sorted(label_y_values.items(), key=lambda x: x[1], reverse=True)
-        sorted_handles = [
-            handle
-            for label, _ in sorted_labels
-            for handle, lbl in zip(handles, labels)
-            if lbl == label
-        ]
-        sorted_labels = [label for label, _ in sorted_labels]
-        ax.legend(sorted_handles, sorted_labels)
-
-    for spine in ax.spines.values():
-        spine.set_visible(False)
+    _style_axes(ax, metric, training_times, show_legend, show_xlabel, show_ylabel, show_xtics)
 
 
 def plot_run_grid(
