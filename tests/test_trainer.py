@@ -103,6 +103,59 @@ def test_train_updates_model_with_training_rows_and_test_targets(monkeypatch: py
     assert not torch.equal(model.class_logits.detach(), original_logits)
 
 
+def test_train_evaluates_at_configured_interval_and_restores_training_mode(
+    capsys: pytest.CaptureFixture[str],
+):
+    model = TinyTrainModel()
+    classifiers: list[trainer.NanoTabPFNClassifier] = []
+    scores = {"accuracy": 0.75}
+
+    def eval_func(classifier: trainer.NanoTabPFNClassifier) -> dict[str, float]:
+        classifiers.append(classifier)
+        return scores
+
+    trained_model, history = trainer.train(
+        model,
+        DataLoader(TrainingBatchDataset([_make_batch() for _ in range(3)]), batch_size=None),
+        device=torch.device("cpu"),
+        steps_per_eval=2,
+        eval_func=eval_func,
+    )
+
+    assert trained_model is model
+    assert len(classifiers) == 1
+    assert classifiers[0].model is model
+    assert classifiers[0].device == torch.device("cpu")
+    assert len(history) == 1
+    elapsed_time, evaluated_scores = history[0]
+    assert elapsed_time >= 0
+    assert evaluated_scores == scores
+    assert model.training
+
+    output = capsys.readouterr().out
+    assert "accuracy  0.7500" in output
+    assert output.count("loss") == 1
+
+
+def test_train_without_eval_func_prints_loss_only_at_configured_interval(
+    capsys: pytest.CaptureFixture[str],
+):
+    model = TinyTrainModel()
+
+    trained_model, history = trainer.train(
+        model,
+        DataLoader(TrainingBatchDataset([_make_batch()]), batch_size=None),
+        device=torch.device("cpu"),
+        steps_per_eval=1,
+    )
+
+    assert trained_model is model
+    assert history == []
+    output = capsys.readouterr().out
+    assert "loss" in output
+    assert "accuracy" not in output
+
+
 @pytest.mark.parametrize(
     ("requested_device", "expected_device", "uses_default_device"),
     [
