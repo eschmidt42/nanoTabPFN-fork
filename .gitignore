@@ -8,3 +8,5 @@ __pycache__/
 Todos.md
 .envrc
 *.pkl
+seed-*.parquet
+baselines.json
