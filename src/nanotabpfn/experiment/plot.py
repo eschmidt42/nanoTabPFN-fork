@@ -6,9 +6,9 @@ import pandas as pd
 import seaborn as sns
 
 
-def plot_runs(
+def plot_nano_runs(
     ax: plt.Axes,
-    runs: list[pd.DataFrame],
+    nano_runs: list[pd.DataFrame],
     metric: str,
     baselines: pd.DataFrame | None = None,
     baselines_std: pd.DataFrame | None = None,
@@ -36,10 +36,10 @@ def plot_runs(
         (0, (5, 5)),  # spaced dash
     ]
 
-    training_times = [run["training_time"].tolist() for run in runs]
+    training_times = [run["training_time"].tolist() for run in nano_runs]
     training_times = sorted({item for sublist in training_times for item in sublist})
     shared_time_runs = []
-    for run in runs:
+    for run in nano_runs:
         run = run.copy()
         run = run[[metric, "training_time"]].set_index("training_time").reindex(training_times)
         run = run.interpolate()
@@ -116,13 +116,13 @@ def plot_runs(
 
 
 def plot_run_grid(
-    runs: list[pd.DataFrame],
+    nano_runs: list[pd.DataFrame],
     baselines: pd.DataFrame | None = None,
     baselines_std: pd.DataFrame | None = None,
 ):
     """Plots the runs in a grid of metrics x datasets"""
     # drop all columns without "/" for dataset/metric format
-    datasets = list({col.split("/")[0] for col in runs[0].columns if "/" in col})
+    datasets = list({col.split("/")[0] for col in nano_runs[0].columns if "/" in col})
     metric = "ROC AUC"
     figsize = (len(datasets) * 4, 4.6)
     fig, axs = plt.subplots(
@@ -132,9 +132,9 @@ def plot_run_grid(
     # Plot each metric and dataset
     for j, dataset in enumerate(datasets):
         ax = axs[j]
-        plot_runs(
+        plot_nano_runs(
             ax,
-            runs,
+            nano_runs,
             f"{dataset}/{metric}",
             baselines,
             baselines_std,

@@ -1,11 +1,29 @@
+from collections.abc import Mapping
+from typing import Protocol, Self
+
 import numpy as np
+from numpy.typing import NDArray
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import BaseCrossValidator, StratifiedKFold
+
+
+class ProbabilisticClassifier(Protocol):
+    def fit(self, X: NDArray, y: NDArray) -> Self: ...
+
+    def predict_proba(self, X: NDArray) -> NDArray: ...
+
 
 SKF = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
 
 
-def evaluate_model(model, datasets, cv: BaseCrossValidator = SKF):
+type EvalResults = dict[str, float]
+
+
+def evaluate_model(
+    model: ProbabilisticClassifier,
+    datasets: Mapping[str, tuple[NDArray, NDArray]],
+    cv: BaseCrossValidator = SKF,
+) -> EvalResults:
     """Evaluates a model on multiple datasets and returns metrics"""
     metrics = {}
     for dataset_name, (X, y) in datasets.items():
