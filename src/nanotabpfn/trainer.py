@@ -1,5 +1,6 @@
 import time
 from collections.abc import Callable
+from typing import NamedTuple
 
 import schedulefree
 import torch
@@ -10,6 +11,12 @@ from nanotabpfn.model import NanoTabPFNClassifier, NanoTabPFNModel
 from nanotabpfn.utils import get_default_device
 
 
+class EvaluationHistoryItem(NamedTuple):
+    training_time: float
+    scores: dict[str, float]
+    iteration: int
+
+
 def train(
     model: NanoTabPFNModel,
     prior: DataLoader,
@@ -17,7 +24,7 @@ def train(
     device: torch.device | None = None,
     steps_per_eval: int = 10,
     eval_func: Callable | None = None,
-):
+) -> tuple[NanoTabPFNModel, list[EvaluationHistoryItem]]:
     """
     Trains our model on the given prior using the given criterion.
 
@@ -32,8 +39,8 @@ def train(
 
     Returns:
         (model) our trained numpy model
-        (list) a list containing our eval history, each entry is the real time used for training so far together
-               with a dict mapping metric names to their average values accross a list of datasets
+        (list) a list containing our evaluation history, each entry contains the training time so far, a dict
+               mapping metric names to their average values across a list of datasets, and the training iteration
     """
     if not device:
         device = get_default_device()
@@ -46,7 +53,7 @@ def train(
     optimizer.train()
 
     train_time = 0
-    eval_history = []
+    eval_history: list[EvaluationHistoryItem] = []
     try:
         for step, full_data in enumerate(prior):
             step_start_time = time.time()
@@ -84,7 +91,13 @@ def train(
 
                 classifier = NanoTabPFNClassifier(model, device)
                 scores = eval_func(classifier)
-                eval_history.append((train_time, scores))
+                eval_history.append(
+                    EvaluationHistoryItem(
+                        training_time=train_time,
+                        scores=scores,
+                        iteration=step + 1,
+                    )
+                )
                 score_str = " | ".join([f"{k} {v:7.4f}" for k, v in scores.items()])
                 print(f"time {train_time:7.1f}s | loss {total_loss:7.4f} | {score_str}")
 
