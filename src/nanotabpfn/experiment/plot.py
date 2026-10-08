@@ -187,7 +187,9 @@ def _plot_nano_runs(
         axis_text_x=element_blank() if not show_xtics else None,
         axis_ticks_major_x=element_blank() if not show_xtics else None,
     )
-    plot += guides(fill="none", linetype="none")
+    plot += guides(
+        fill="none",
+    )
     return plot
 
 
