@@ -1,0 +1,43 @@
+# https://docs.astral.sh/uv/guides/integration/github/#setting-up-python
+name: CI
+
+# Shared variables
+env:
+  UV_VERSION: "0.12.22"
+
+on:
+  push:
+  # pull_request:
+
+
+jobs:
+
+  uv-example:
+    name: python
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.14"
+
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: ${{ env.UV_VERSION }}
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install the project
+        run: uv sync --frozen --no-default-groups --group test
+
+      - name: Run tests
+        run: |
+          uv run --frozen --no-default-groups --group test pytest tests
