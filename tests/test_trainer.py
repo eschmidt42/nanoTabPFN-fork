@@ -127,9 +127,10 @@ def test_train_evaluates_at_configured_interval_and_restores_training_mode(
     assert classifiers[0].model is model
     assert classifiers[0].device == torch.device("cpu")
     assert len(history) == 1
-    elapsed_time, evaluated_scores = history[0]
-    assert elapsed_time >= 0
-    assert evaluated_scores == scores
+    history_item = history[0]
+    assert history_item.training_time >= 0
+    assert history_item.scores == scores
+    assert history_item.iteration == 2
     assert model.training
 
     output = capsys.readouterr().out
