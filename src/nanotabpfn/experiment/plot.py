@@ -1,3 +1,5 @@
+from enum import StrEnum, auto
+
 import pandas as pd
 import polars as pl
 from numpy.typing import NDArray
@@ -23,10 +25,9 @@ from plotnine import (
 )
 
 
-def _summarize_nano_runs(
+def _align_nano_runs_by_training_time(
     nano_runs: list[pl.DataFrame], metric: str
-) -> tuple[NDArray, NDArray, NDArray | None]:
-
+) -> tuple[pl.DataFrame, list[str]]:
     shared_times = (
         pl.concat([run.select("training_time") for run in nano_runs]).unique().sort("training_time")
     )
@@ -51,8 +52,17 @@ def _summarize_nano_runs(
         all_runs = all_runs.join(run, on="training_time", how="inner")
 
     all_runs = all_runs.drop_nulls().sort("training_time")
-
     run_columns = [f"run_{i}" for i in range(len(aligned_runs))]
+
+    return all_runs, run_columns
+
+
+def _get_nano_runs_time_summary(
+    nano_runs: list[pl.DataFrame], metric: str
+) -> tuple[NDArray, NDArray, NDArray | None]:
+
+    all_runs, run_columns = _align_nano_runs_by_training_time(nano_runs, metric)
+
     values = all_runs.select(run_columns).to_numpy()
 
     mean = values.mean(axis=1)
@@ -78,13 +88,20 @@ _PLOTNINE_LINETYPES = [
 ]
 
 
+class XTypesEnum(StrEnum):
+    training_time = auto()
+    iteration = auto()
+
+
 def _plot_nano_runs_data(
     nano_runs: list[pl.DataFrame],
     metric: str,
     baselines: pl.DataFrame | None,
     baselines_std: pl.DataFrame | None,
+    # x_type:XTypesEnum,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
-    training_times, mean, std = _summarize_nano_runs(nano_runs, metric)
+
+    training_times, mean, std = _get_nano_runs_time_summary(nano_runs, metric)
 
     line_data = pd.DataFrame(
         {

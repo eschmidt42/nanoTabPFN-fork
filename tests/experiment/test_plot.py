@@ -6,6 +6,8 @@ from plotnine import ggplot
 from nanotabpfn.experiment import plot_nano_runs as exported_plot_nano_runs
 from nanotabpfn.experiment import plot_run_grid as exported_plot_run_grid
 from nanotabpfn.experiment.plot import (
+    _align_nano_runs_by_training_time,
+    _get_nano_runs_time_summary,
     _plot_nano_runs_data,
     plot_nano_runs,
     plot_run_grid,
@@ -39,6 +41,57 @@ def _make_polars_baselines() -> pl.DataFrame:
             "wine/ROC AUC": [0.65],
         }
     )
+
+
+def _make_interpolation_runs() -> list[pl.DataFrame]:
+    return [
+        pl.DataFrame(
+            {
+                "training_time": [2.0, 0.0],
+                "ROC AUC": [0.8, 0.2],
+            }
+        ),
+        pl.DataFrame(
+            {
+                "training_time": [2.0, 1.0, 0.0],
+                "ROC AUC": [0.6, float("nan"), 0.4],
+            }
+        ),
+    ]
+
+
+def test_align_nano_runs_by_training_time_interpolates_and_sorts_runs() -> None:
+    aligned, run_columns = _align_nano_runs_by_training_time(_make_interpolation_runs(), "ROC AUC")
+
+    assert run_columns == ["run_0", "run_1"]
+    np.testing.assert_array_equal(aligned["training_time"].to_numpy(), [0.0, 1.0, 2.0])
+    np.testing.assert_allclose(
+        aligned.select(run_columns).to_numpy(),
+        [[0.2, 0.4], [0.5, 0.5], [0.8, 0.6]],
+    )
+
+
+def test_get_nano_runs_time_summary_returns_mean_and_sample_std() -> None:
+    training_times, mean, std = _get_nano_runs_time_summary(
+        _make_interpolation_runs(),
+        "ROC AUC",
+    )
+
+    np.testing.assert_array_equal(training_times, [0.0, 1.0, 2.0])
+    np.testing.assert_allclose(mean, [0.3, 0.5, 0.7])
+    assert std is not None
+    np.testing.assert_allclose(std, [np.sqrt(0.02), 0.0, np.sqrt(0.02)])
+
+
+def test_get_nano_runs_time_summary_returns_no_std_for_one_run() -> None:
+    training_times, mean, std = _get_nano_runs_time_summary(
+        [_make_interpolation_runs()[0]],
+        "ROC AUC",
+    )
+
+    np.testing.assert_array_equal(training_times, [0.0, 2.0])
+    np.testing.assert_allclose(mean, [0.2, 0.8])
+    assert std is None
 
 
 def test_plot_nano_runs_returns_plotnine_plot_with_summary_and_baselines() -> None:
