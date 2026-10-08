@@ -17,7 +17,7 @@ def train(
     device: torch.device | None = None,
     steps_per_eval: int = 10,
     eval_func: Callable | None = None,
-):
+) -> tuple[NanoTabPFNModel, list[tuple[float, dict[str, float]]]]:
     """
     Trains our model on the given prior using the given criterion.
 
