@@ -6,10 +6,12 @@ from plotnine import (
     coord_cartesian,
     element_blank,
     element_line,
+    element_text,
     facet_wrap,
     geom_line,
     geom_ribbon,
     ggplot,
+    guide_legend,
     guides,
     labs,
     scale_color_manual,
@@ -169,8 +171,16 @@ def _plot_nano_runs(
             group="series",
         ),
     )
-    plot += scale_color_manual(values=colors, name=None)
-    plot += scale_fill_manual(values=colors, name=None)
+    plot += scale_color_manual(
+        values=colors,
+        #    limits=series,
+        name=None,
+    )
+    plot += scale_fill_manual(
+        values=colors,
+        #   limits=series,
+        name=None,
+    )
     plot += scale_linetype_manual(values=linetypes, name=None)
     plot += scale_x_continuous(limits=(0, max_training_time), expand=(0, 0))
     plot += coord_cartesian(ylim=(None, 1))
@@ -181,13 +191,18 @@ def _plot_nano_runs(
     plot += theme_minimal()
     plot += theme(
         legend_position="top" if show_legend else "none",
+        legend_direction="horizontal",
+        legend_text=element_text(size=8),
         panel_grid_major_x=element_blank(),
         panel_grid_major_y=element_line(color="#d9d9d9"),
         axis_ticks_major_y=element_blank(),
         axis_text_x=element_blank() if not show_xtics else None,
         axis_ticks_major_x=element_blank() if not show_xtics else None,
+        figure_size=(12, 6),
     )
     plot += guides(
+        color=guide_legend(ncol=3, byrow=True),
+        linetype=guide_legend(ncol=3, byrow=True),
         fill="none",
     )
     return plot
